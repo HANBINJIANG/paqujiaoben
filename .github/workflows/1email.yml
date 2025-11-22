@@ -3,7 +3,7 @@ name: Daily Subscription Email
 on:
   schedule:
     - cron: "0 0 * * *"   # 每天 00:00 UTC（北京时间 08:00）
-  workflow_dispatch:        # ✅ 手动运行按钮
+  workflow_dispatch:        # ✅ 手动运行入口
 
 jobs:
   send_email:
@@ -20,15 +20,13 @@ jobs:
 
       - name: Search top 5 GitHub repositories
         run: |
-          echo "🔍 正在搜索 GitHub 上 star ≥ 100 的 v2rayN 仓库..."
           curl -s "https://api.github.com/search/repositories?q=free+v2rayN+stars:>100&sort=updated&order=desc&per_page=5" \
             -H "Accept: application/vnd.github.v3+json" \
             -o repos.json
           jq -r '.items[].html_url' repos.json > repo_urls.txt
 
-      - name: Extract .txt subscription links from README
+      - name: Extract .txt subscription links
         run: |
-          echo "📄 正在提取 README 中的订阅链接..."
           > readmes.txt
           while read repo; do
             for branch in main master; do
@@ -37,31 +35,24 @@ jobs:
             done
           done < repo_urls.txt
           grep -Eo 'https?://[^\s")]+\.txt' readmes.txt | sort -u > sub_links.txt
-          echo "✅ 提取到订阅链接数量: $(wc -l < sub_links.txt)"
 
       - name: Download subscriptions
         run: |
-          echo "🌐 正在下载订阅内容..."
           > nodes.txt
           while read url; do
-            echo "下载订阅: $url"
-            curl -fsSL "$url" >> nodes.txt || echo "❌ 下载失败: $url"
+            curl -fsSL "$url" >> nodes.txt || echo "下载失败: $url"
           done < sub_links.txt
 
-      - name: Detect format and decode if needed
+      - name: Detect format and decode
         run: |
-          echo "🔍 检测订阅格式..."
           if grep -Eq '^[A-Za-z0-9+/=]+$' nodes.txt; then
-            echo "检测到 Base64 格式，正在解码..."
             base64 -d nodes.txt > decoded.txt || cp nodes.txt decoded.txt
           else
-            echo "检测到纯文本格式，直接使用"
             cp nodes.txt decoded.txt
           fi
 
       - name: Filter and group nodes
         run: |
-          echo "📦 正在筛选并分组节点..."
           echo "=== vmess 节点 ===" > filtered.txt
           grep -i "vmess" decoded.txt >> filtered.txt || echo "无 vmess 节点" >> filtered.txt
 
@@ -79,7 +70,7 @@ jobs:
           echo "vless: $(grep -i "vless" decoded.txt | wc -l)" >> filtered.txt
           echo "trojan: $(grep -i "trojan" decoded.txt | wc -l)" >> filtered.txt
 
-      - name: Send email with results
+      - name: Send email
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.qq.com
