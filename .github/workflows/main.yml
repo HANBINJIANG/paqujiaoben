@@ -1,0 +1,45 @@
+name: Daily Node Email
+
+on:
+  schedule:
+    - cron: "0 0 * * *"   # 每天 00:00 执行一次（北京时间 08:00）
+  workflow_dispatch:        # 手动运行按钮
+
+jobs:
+  send_email:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq curl
+
+      - name: Fetch v2rayN nodes
+        run: |
+          curl -L https://raw.githubusercontent.com/your-source/your-repo/main/sub.txt -o nodes.txt
+
+      - name: Filter nodes
+        run: |
+          grep -i "vmess\|vless\|trojan" nodes.txt > filtered.txt
+
+      - name: Send email
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.qq.com
+          server_port: 465
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          subject: "今日 v2rayN公益节点"
+          from: ${{ secrets.MAIL_FROM }}
+          to: ${{ secrets.MAIL_TO }}
+          secure: true
+          body: |
+            今日筛选后的节点如下（自动发送）：
+
+            $(cat filtered.txt)
+
+          attachments: filtered.txt
