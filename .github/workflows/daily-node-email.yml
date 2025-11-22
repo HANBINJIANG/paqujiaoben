@@ -1,0 +1,70 @@
+name: Daily Node Email
+
+on:
+  schedule:
+    - cron: "0 0 * * *"   # 每天 00:00 UTC（北京时间 08:00）
+  workflow_dispatch:        # 支持手动触发
+
+jobs:
+  send_email:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl grep coreutils
+
+      - name: Fetch subscription
+        run: |
+          # 下载订阅文件
+          curl -fsSL https://raw.githubusercontent.com/your-source/your-repo/main/sub.txt -o sub.txt
+          if [ ! -s sub.txt ]; then
+            echo "订阅下载失败或为空" > sub.txt
+          fi
+
+      - name: Detect and decode subscription
+        run: |
+          # 判断是否是 Base64（简单检测：是否只有字母数字+/=）
+          if grep -Eq '^[A-Za-z0-9+/=]+$' sub.txt; then
+            echo "检测到 Base64 格式，正在解码..."
+            base64 -d sub.txt > nodes.txt || echo "Base64 解码失败" > nodes.txt
+          else
+            echo "检测到纯文本格式，直接使用..."
+            cp sub.txt nodes.txt
+          fi
+
+      - name: Filter and group nodes
+        run: |
+          # 分组输出，按协议分类
+          echo "=== vmess 节点 ===" > filtered.txt
+          grep -i "vmess" nodes.txt >> filtered.txt || echo "无 vmess 节点" >> filtered.txt
+
+          echo "" >> filtered.txt
+          echo "=== vless 节点 ===" >> filtered.txt
+          grep -i "vless" nodes.txt >> filtered.txt || echo "无 vless 节点" >> filtered.txt
+
+          echo "" >> filtered.txt
+          echo "=== trojan 节点 ===" >> filtered.txt
+          grep -i "trojan" nodes.txt >> filtered.txt || echo "无 trojan 节点" >> filtered.txt
+
+          # 打印前 50 行到日志，方便调试
+          echo "=== 节点预览 ==="
+          head -n 50 filtered.txt
+
+      - name: Send email
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.qq.com
+          server_port: 465
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          subject: 今日 v2rayN 公益节点
+          from: ${{ secrets.MAIL_FROM }}
+          to: ${{ secrets.MAIL_TO }}
+          secure: true
+          body_file: filtered.txt
+          attachments: filtered.txt
